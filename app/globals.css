@@ -19,8 +19,13 @@ body {
   color: var(--foreground);
 }
 
-input, textarea, select {
-  @apply outline-none;
+/* Hide pointer-induced focus, keep keyboard focus visible. Each form
+   primitive layers its own focus-visible ring on top. */
+input:focus,
+textarea:focus,
+select:focus,
+button:focus {
+  outline: none;
 }
 
 .resume-paper {

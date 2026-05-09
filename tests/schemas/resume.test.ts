@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  autosaveResumeInputSchema,
+  createResumeInputSchema,
+  draftResumeSchema,
   resumeDraftSchema,
   resumeNameSchema,
-  createResumeInputSchema,
-  updateResumeInputSchema,
 } from '@/lib/schemas/resume';
 import { sampleResume, emptyResume } from '@/lib/data/default-resume';
 
@@ -69,20 +70,40 @@ describe('createResumeInputSchema', () => {
   });
 });
 
-describe('updateResumeInputSchema', () => {
+describe('autosaveResumeInputSchema', () => {
   it('requires a resume id', () => {
     expect(
-      updateResumeInputSchema.safeParse({ id: '', data: sampleResume }).success,
+      autosaveResumeInputSchema.safeParse({ id: '', data: sampleResume }).success,
     ).toBe(false);
   });
 
-  it('accepts a valid update payload', () => {
+  it('accepts a valid autosave payload', () => {
     expect(
-      updateResumeInputSchema.safeParse({
+      autosaveResumeInputSchema.safeParse({
         id: 'abc',
         data: sampleResume,
         template: 'minimal-mono',
       }).success,
     ).toBe(true);
+  });
+
+  it('tolerates partial draft data (mid-edit)', () => {
+    expect(
+      autosaveResumeInputSchema.safeParse({
+        id: 'abc',
+        data: { ...sampleResume, basics: { ...sampleResume.basics, summary: '' } },
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe('draftResumeSchema', () => {
+  it('accepts the seeded sample resume', () => {
+    expect(draftResumeSchema.safeParse(sampleResume).success).toBe(true);
+  });
+
+  it('accepts an empty resume seed (mid-edit)', () => {
+    const empty = emptyResume();
+    expect(draftResumeSchema.safeParse(empty).success).toBe(true);
   });
 });

@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { confirmPasswordField, fullNameField, passwordField } from './auth';
+import { confirmPasswordField, nameField, passwordField } from './auth';
 
 export const updateNameSchema = z.object({
-  fullName: fullNameField,
+  name: nameField,
 });
 export type UpdateNameInput = z.infer<typeof updateNameSchema>;
 

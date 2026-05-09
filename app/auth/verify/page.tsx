@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { verifyOtpAction } from '@/lib/actions/session-actions';
 import { otpSchema } from '@/lib/schemas/auth';
-import { AuthHeader } from '@/components/auth/auth-header';
+import { PageHeader } from '@/components/ui/page-header';
 import { OtpInput } from '@/components/auth/otp-input';
-import { Banner } from '@/components/ui/banner';
-import { Button } from '@/components/ui/button';
+import { FormFeedback } from '@/components/ui/form-feedback';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 const OTP_LENGTH = 6;
 
@@ -44,7 +44,7 @@ export default function VerifyPage() {
 
   return (
     <>
-      <AuthHeader
+      <PageHeader
         eyebrow="Verify your email"
         title="Enter the 6-digit code"
         description={
@@ -77,16 +77,17 @@ export default function VerifyPage() {
           disabled={pending}
         />
 
-        {error ? <Banner variant="error">{error}</Banner> : null}
+        <FormFeedback error={error} />
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="submit"
+          <SubmitButton
+            pending={pending}
+            pendingLabel="Verifying..."
             disabled={pending || code.length !== OTP_LENGTH}
             className="w-full sm:w-auto"
           >
-            {pending ? 'Verifying...' : 'Verify and continue'}
-          </Button>
+            Verify and continue
+          </SubmitButton>
           <p className="text-xs leading-5 text-slate-500">
             Wrong email?{' '}
             <Link

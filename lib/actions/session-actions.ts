@@ -1,14 +1,23 @@
 'use server';
 
-import { cookies, headers } from 'next/headers';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { prisma } from '@/lib/db';
-import { hashPassword, verifyPassword } from '@/lib/auth/password';
-import { SESSION_COOKIE, SESSION_TTL_DAYS } from '@/lib/auth/constants';
+import mongoose, { Types } from 'mongoose';
+import { signIn, signOut } from '@/auth';
+import { connectMongo } from '@/lib/mongodb';
+import { User } from '@/lib/models/user';
+import { PasswordResetToken } from '@/lib/models/password-reset-token';
+import { hashPassword } from '@/lib/auth/password';
+import {
+  buildResetTokenExpiry,
+  generateResetToken,
+  hashToken,
+} from '@/lib/auth/tokens';
 import { failure, success } from '@/lib/types/api';
-import { isProd } from '@/lib/env';
+import { env } from '@/lib/env';
 import { logger, captureException } from '@/lib/logger';
 import { rateLimit } from '@/lib/rate-limit';
+import { sendWelcomeEmail, sendPasswordResetEmail } from '@/lib/email';
 import { validated } from './utils';
 import {
   loginSchema,
@@ -23,7 +32,6 @@ import {
   type SignupServerInput,
 } from '@/lib/schemas/auth';
 
-const MAX_SESSIONS_PER_USER = 10;
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX_LOGIN = 5;
 const RATE_MAX_SIGNUP = 5;
@@ -43,43 +51,6 @@ function rateLimitFailure(retryAfterMs: number) {
   return failure('RATE_LIMITED', `Too many attempts. Try again in ${seconds}s.`);
 }
 
-async function writeSessionCookie(sessionId: string, expiresAt: Date) {
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, sessionId, {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-    expires: expiresAt,
-    secure: isProd,
-  });
-}
-
-function buildExpiry(): Date {
-  const expires = new Date();
-  expires.setDate(expires.getDate() + SESSION_TTL_DAYS);
-  return expires;
-}
-
-async function pruneSessions(userId: string) {
-  await prisma.session.deleteMany({
-    where: { userId, expiresAt: { lt: new Date() } },
-  });
-  const count = await prisma.session.count({ where: { userId } });
-  if (count > MAX_SESSIONS_PER_USER) {
-    const surplus = await prisma.session.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'asc' },
-      take: count - MAX_SESSIONS_PER_USER,
-      select: { id: true },
-    });
-    if (surplus.length > 0) {
-      await prisma.session.deleteMany({
-        where: { id: { in: surplus.map((s) => s.id) } },
-      });
-    }
-  }
-}
-
 export async function signupAction(input: SignupServerInput) {
   return validated(signupServerSchema, input, async (data) => {
     const limit = rateLimit({
@@ -91,29 +62,42 @@ export async function signupAction(input: SignupServerInput) {
 
     const email = data.email.toLowerCase().trim();
     try {
-      const existing = await prisma.user.findUnique({ where: { email } });
+      await connectMongo();
+
+      const existing = await User.findOne({ email }).select('_id').lean();
       if (existing) {
         return failure('EMAIL_TAKEN', 'An account with that email already exists.');
       }
 
       const passwordHash = await hashPassword(data.password);
-      const expiresAt = buildExpiry();
 
-      const user = await prisma.user.create({
-        data: {
-          email,
-          fullName: data.fullName,
-          passwordHash,
-          sessions: { create: { expiresAt } },
-        },
-        include: { sessions: { orderBy: { createdAt: 'desc' }, take: 1 } },
+      const user = await User.create({
+        email,
+        name: data.name,
+        passwordHash,
       });
 
-      await writeSessionCookie(user.sessions[0].id, expiresAt);
-      logger.info('user.signup', { userId: user.id });
+      logger.info('user.signup', { userId: user._id.toString() });
+
+      try {
+        await signIn('credentials', {
+          email,
+          password: data.password,
+          redirect: false,
+        });
+      } catch (signInError) {
+        captureException(signInError, { action: 'signupAction.signIn', email });
+        return failure('INTERNAL', 'Account created, but auto sign-in failed. Please log in.');
+      }
+
+      await sendWelcomeEmail({
+        to: email,
+        fullName: data.name,
+        dashboardUrl: `${env.NEXT_PUBLIC_BASE_URL}/dashboard`,
+      });
 
       return success(
-        { userId: user.id, email: user.email, fullName: user.fullName },
+        { userId: user._id.toString(), email, name: data.name },
         'Account created.',
       );
     } catch (error) {
@@ -132,33 +116,21 @@ export async function loginAction(input: LoginInput) {
     });
     if (!limit.ok) return rateLimitFailure(limit.retryAfterMs);
 
-    const email = data.email.toLowerCase().trim();
     try {
-      const user = await prisma.user.findUnique({ where: { email } });
-      if (!user) {
-        return failure('INVALID_CREDENTIALS', 'Email or password is incorrect.');
-      }
-
-      const valid = await verifyPassword(data.password, user.passwordHash);
-      if (!valid) {
-        logger.warn('user.login.invalid_password', { userId: user.id });
-        return failure('INVALID_CREDENTIALS', 'Email or password is incorrect.');
-      }
-
-      await pruneSessions(user.id);
-
-      const expiresAt = buildExpiry();
-      const session = await prisma.session.create({
-        data: { userId: user.id, expiresAt },
+      await signIn('credentials', {
+        email: data.email,
+        password: data.password,
+        redirect: false,
       });
-
-      await writeSessionCookie(session.id, expiresAt);
-      logger.info('user.login', { userId: user.id });
-
-      return success({ userId: user.id, email: user.email }, 'Signed in.');
+      logger.info('user.login', { email: data.email });
+      return success({ email: data.email }, 'Signed in.');
     } catch (error) {
-      captureException(error, { action: 'loginAction', email });
-      return failure('INTERNAL', 'Something went wrong. Please try again.');
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('CredentialsSignin') || message.includes('configuration')) {
+        return failure('INVALID_CREDENTIALS', 'Email or password is incorrect.');
+      }
+      captureException(error, { action: 'loginAction', email: data.email });
+      return failure('INVALID_CREDENTIALS', 'Email or password is incorrect.');
     }
   });
 }
@@ -172,10 +144,39 @@ export async function requestPasswordRecovery(input: RecoveryInput) {
     });
     if (!limit.ok) return rateLimitFailure(limit.retryAfterMs);
 
-    return success(
-      { email: data.email },
+    const email = data.email.toLowerCase().trim();
+    const genericSuccess = success(
+      { email },
       'If an account exists for that email, a recovery link is on its way.',
     );
+
+    try {
+      await connectMongo();
+
+      const user = await User.findOne({ email }).select('_id email').lean();
+      if (!user) return genericSuccess;
+
+      const { plain, hash } = generateResetToken();
+      const expiresAt = buildResetTokenExpiry();
+
+      await PasswordResetToken.deleteMany({ userId: user._id });
+      await PasswordResetToken.create({
+        userId: user._id,
+        tokenHash: hash,
+        expiresAt,
+      });
+
+      await sendPasswordResetEmail({
+        to: user.email,
+        resetUrl: `${env.NEXT_PUBLIC_BASE_URL}/auth/reset?token=${plain}`,
+      });
+
+      logger.info('user.password_recovery_requested', { userId: user._id.toString() });
+      return genericSuccess;
+    } catch (error) {
+      captureException(error, { action: 'requestPasswordRecovery', email });
+      return genericSuccess;
+    }
   });
 }
 
@@ -189,27 +190,56 @@ export async function verifyOtpAction(input: OtpInput) {
 }
 
 export async function resetPasswordAction(input: ResetInput) {
-  return validated(resetSchema, input, async () => {
-    return success({ ok: true }, 'Password updated. Sign in with your new password.');
+  return validated(resetSchema, input, async (data) => {
+    try {
+      await connectMongo();
+
+      const tokenHash = hashToken(data.token);
+      const record = await PasswordResetToken.findOne({ tokenHash }).lean();
+
+      if (!record || record.expiresAt < new Date()) {
+        return failure(
+          'INVALID_RESET',
+          'This reset link is invalid or has expired. Request a new one.',
+        );
+      }
+
+      const newHash = await hashPassword(data.password);
+
+      const dbSession = await mongoose.startSession();
+      try {
+        await dbSession.withTransaction(async () => {
+          await User.updateOne(
+            { _id: record.userId },
+            { passwordHash: newHash },
+          ).session(dbSession);
+          await PasswordResetToken.deleteOne({ _id: record._id }).session(dbSession);
+        });
+      } finally {
+        await dbSession.endSession();
+      }
+
+      logger.info('user.password_reset', { userId: record.userId.toString() });
+      return success({ ok: true }, 'Password updated. Sign in with your new password.');
+    } catch (error) {
+      captureException(error, { action: 'resetPasswordAction' });
+      return failure('INTERNAL', 'Could not reset password. Please try again.');
+    }
   });
 }
 
 export async function signOutAction() {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get(SESSION_COOKIE)?.value;
-  if (sessionId) {
-    await prisma.session.deleteMany({ where: { id: sessionId } });
-  }
-  cookieStore.delete(SESSION_COOKIE);
+  await signOut({ redirect: false });
   return success({ ok: true }, 'Signed out.');
 }
 
 export async function signOutAndRedirect() {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get(SESSION_COOKIE)?.value;
-  if (sessionId) {
-    await prisma.session.deleteMany({ where: { id: sessionId } });
-  }
-  cookieStore.delete(SESSION_COOKIE);
+  await signOut({ redirect: false });
   redirect('/');
 }
+
+export async function signInWithGoogleAction(redirectTo?: string) {
+  await signIn('google', { redirectTo: redirectTo ?? '/dashboard' });
+}
+
+void Types;

@@ -38,14 +38,15 @@ export function RenameResumeForm({
     return (
       <button
         type="button"
+        title={initialName}
         onClick={() => {
           setEditing(true);
           setError('');
         }}
-        className="inline-flex items-center gap-1.5 text-base font-semibold text-ink hover:text-brand-700"
+        className="inline-flex w-full max-w-full items-center gap-1.5 text-left text-base font-semibold text-ink hover:text-brand-700"
       >
-        {initialName}
-        <Pencil className="h-3.5 w-3.5 opacity-60" />
+        <span className="truncate">{initialName}</span>
+        <Pencil className="h-3.5 w-3.5 shrink-0 opacity-60" />
       </button>
     );
   }
@@ -56,7 +57,7 @@ export function RenameResumeForm({
         event.preventDefault();
         commit();
       }}
-      className="flex flex-wrap items-center gap-2"
+      className="space-y-2"
     >
       <input
         autoFocus
@@ -64,9 +65,9 @@ export function RenameResumeForm({
         onChange={(event) => setName(event.target.value)}
         onBlur={commit}
         disabled={pending}
-        className="h-9 rounded-full border border-slate-200 bg-white px-3 text-sm text-ink focus:border-brand-300"
+        className="h-10 w-full rounded-full border border-slate-200 bg-white px-3 text-sm text-ink focus:border-brand-300 focus:outline-none"
       />
-      {error ? <span className="text-xs text-rose-700">{error}</span> : null}
+      {error ? <span className="block text-xs text-rose-700">{error}</span> : null}
     </form>
   );
 }

@@ -15,7 +15,12 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 4,
   },
-  sidebarText: { fontSize: 9, color: '#e0f2fe', lineHeight: 1.5 },
+  sidebarText: {
+    fontSize: 9,
+    color: '#e0f2fe',
+    lineHeight: 1.5,
+    wordBreak: 'break-all',
+  },
   chip: {
     fontSize: 9,
     color: '#ffffff',
@@ -37,83 +42,123 @@ const styles = StyleSheet.create({
   body: { fontSize: 10, lineHeight: 1.5, color: '#1f2937' },
   itemTitle: { fontSize: 10, fontWeight: 'bold' },
   meta: { fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 },
+  link: { fontSize: 9, color: '#64748b', wordBreak: 'break-all' },
+  entry: { marginBottom: 8 },
 });
 
+function nonEmpty<T extends string>(values: (T | undefined | null)[]): T[] {
+  return values.filter((v): v is T => Boolean(v && v.trim?.() !== ''));
+}
+
 export function ModernSidebarPdf({ draft }: { draft: ResumeDraft }) {
-  const allSkills = [
+  const allSkills = nonEmpty([
     ...draft.skills.frontend,
     ...draft.skills.backend,
     ...draft.skills.database,
     ...draft.skills.soft,
-  ];
+  ]);
+  const interests = nonEmpty([...draft.extras.interests, ...draft.extras.hobbies]);
+  const sidebarContacts = nonEmpty([
+    draft.basics.email,
+    draft.basics.phone,
+    draft.basics.location,
+    draft.basics.website,
+    draft.basics.github,
+    draft.basics.linkedin,
+  ]);
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
+      <Page size="A4" style={styles.page} wrap>
         <View style={styles.sidebar}>
-          <Text style={styles.name}>{draft.basics.fullName}</Text>
-          <Text style={styles.title}>{draft.basics.professionalTitle}</Text>
-          {draft.basics.email ? <Text style={styles.sidebarText}>{draft.basics.email}</Text> : null}
-          {draft.basics.phone ? <Text style={styles.sidebarText}>{draft.basics.phone}</Text> : null}
-          {draft.basics.location ? <Text style={styles.sidebarText}>{draft.basics.location}</Text> : null}
-          {draft.basics.website ? <Text style={styles.sidebarText}>{draft.basics.website}</Text> : null}
-          {draft.basics.github ? <Text style={styles.sidebarText}>{draft.basics.github}</Text> : null}
-          {draft.basics.linkedin ? <Text style={styles.sidebarText}>{draft.basics.linkedin}</Text> : null}
+          <View wrap={false}>
+            <Text style={styles.name}>{draft.basics.fullName || 'Untitled resume'}</Text>
+            <Text style={styles.title}>{draft.basics.professionalTitle}</Text>
+            {sidebarContacts.map((line, index) => (
+              <Text key={`contact-${index}`} style={styles.sidebarText}>
+                {line}
+              </Text>
+            ))}
+          </View>
 
           {allSkills.length > 0 ? (
-            <>
+            <View wrap={false}>
               <Text style={styles.sidebarLabel}>Skills</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-                {allSkills.map((skill) => (
-                  <Text key={skill} style={styles.chip}>
+                {allSkills.map((skill, index) => (
+                  <Text key={`skill-${index}`} style={styles.chip}>
                     {skill}
                   </Text>
                 ))}
               </View>
-            </>
+            </View>
           ) : null}
 
-          <Text style={styles.sidebarLabel}>Education</Text>
-          {draft.education.map((item) => (
-            <View key={`${item.institution}-${item.year}`} style={{ marginBottom: 6 }}>
-              <Text style={[styles.sidebarText, { fontWeight: 'bold' }]}>{item.degree}</Text>
-              <Text style={styles.sidebarText}>{item.institution}</Text>
-              <Text style={styles.sidebarText}>{item.year}</Text>
+          {draft.education.length > 0 ? (
+            <View>
+              <Text style={styles.sidebarLabel}>Education</Text>
+              {draft.education.map((item, index) => (
+                <View key={`edu-${index}`} style={{ marginBottom: 6 }} wrap={false}>
+                  <Text style={[styles.sidebarText, { fontWeight: 'bold' }]}>
+                    {item.degree}
+                  </Text>
+                  <Text style={styles.sidebarText}>{item.institution}</Text>
+                  <Text style={styles.sidebarText}>{item.year}</Text>
+                </View>
+              ))}
             </View>
-          ))}
+          ) : null}
 
-          <Text style={styles.sidebarLabel}>Interests</Text>
-          <Text style={styles.sidebarText}>
-            {[...draft.extras.interests, ...draft.extras.hobbies].join(', ')}
-          </Text>
+          {interests.length > 0 ? (
+            <View wrap={false}>
+              <Text style={styles.sidebarLabel}>Interests</Text>
+              <Text style={styles.sidebarText}>{interests.join(', ')}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.main}>
-          <Text style={styles.sectionLabel}>Summary</Text>
-          <Text style={styles.body}>{draft.basics.summary}</Text>
-
-          <Text style={styles.sectionLabel}>Experience</Text>
-          {draft.experience.map((item) => (
-            <View key={`${item.company}-${item.role}`} style={{ marginBottom: 8 }}>
-              <Text style={styles.itemTitle}>
-                {item.role} · {item.company}
-              </Text>
-              <Text style={styles.meta}>
-                {item.start} - {item.current ? 'Present' : item.end}
-              </Text>
-              <Text style={styles.body}>{item.summary}</Text>
+          {draft.basics.summary ? (
+            <View wrap={false}>
+              <Text style={styles.sectionLabel}>Summary</Text>
+              <Text style={styles.body}>{draft.basics.summary}</Text>
             </View>
-          ))}
+          ) : null}
 
-          <Text style={styles.sectionLabel}>Projects</Text>
-          {draft.projects.map((project) => (
-            <View key={project.title} style={{ marginBottom: 8 }}>
-              <Text style={styles.itemTitle}>{project.title}</Text>
-              <Text style={styles.body}>{project.description}</Text>
-              <Text style={styles.meta}>{project.technologies.join(', ')}</Text>
-              <Text style={[styles.body, { color: '#64748b' }]}>{project.link}</Text>
+          {draft.experience.length > 0 ? (
+            <View>
+              <Text style={styles.sectionLabel}>Experience</Text>
+              {draft.experience.map((item, index) => (
+                <View key={`exp-${index}`} style={styles.entry} wrap={false}>
+                  <Text style={styles.itemTitle}>
+                    {item.role} · {item.company}
+                  </Text>
+                  <Text style={styles.meta}>
+                    {item.start} - {item.current ? 'Present' : item.end}
+                  </Text>
+                  <Text style={styles.body}>{item.summary}</Text>
+                </View>
+              ))}
             </View>
-          ))}
+          ) : null}
+
+          {draft.projects.length > 0 ? (
+            <View>
+              <Text style={styles.sectionLabel}>Projects</Text>
+              {draft.projects.map((project, index) => (
+                <View key={`prj-${index}`} style={styles.entry} wrap={false}>
+                  <Text style={styles.itemTitle}>{project.title}</Text>
+                  <Text style={styles.body}>{project.description}</Text>
+                  {project.technologies.length > 0 ? (
+                    <Text style={styles.meta}>
+                      {project.technologies.filter(Boolean).join(', ')}
+                    </Text>
+                  ) : null}
+                  {project.link ? <Text style={styles.link}>{project.link}</Text> : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
       </Page>
     </Document>

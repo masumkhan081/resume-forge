@@ -6,8 +6,11 @@ on:
     branches: [main, master]
 
 env:
-  DATABASE_URL: file:./test.db
   NEXT_PUBLIC_BASE_URL: http://localhost:3000
+  MONGODB_URI: mongodb://placeholder:placeholder@localhost:27017
+  MONGODB_DB_NAME: resume-forge
+  AUTH_SECRET: ci-placeholder-auth-secret-32-chars-long
+  AUTH_TRUST_HOST: 'true'
 
 jobs:
   check:
@@ -30,12 +33,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm prisma generate
-
-      - name: Apply schema
-        run: pnpm prisma db push --skip-generate
 
       - name: Typecheck
         run: pnpm typecheck

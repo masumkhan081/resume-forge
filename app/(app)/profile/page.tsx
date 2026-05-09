@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 export default async function ProfilePage() {
   const session = await getSession();
-  if (!session) redirect('/auth/login?next=/profile');
+  if (!session) redirect('/auth/login?callbackUrl=/profile');
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -35,7 +35,7 @@ export default async function ProfilePage() {
           Shown in the app shell. Not the same as the name on the resume itself.
         </p>
         <div className="mt-4">
-          <ProfileNameForm initialName={session.fullName} />
+          <ProfileNameForm initialName={session.name ?? ''} />
         </div>
       </Card>
 

@@ -5,8 +5,8 @@ import { updateProfileNameAction } from '@/lib/actions/account-actions';
 import { updateNameSchema } from '@/lib/schemas/account';
 import { useZodForm } from '@/lib/hooks/use-zod-form';
 import { Field } from '@/components/ui/field';
-import { Button } from '@/components/ui/button';
-import { Banner } from '@/components/ui/banner';
+import { FormFeedback } from '@/components/ui/form-feedback';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export function ProfileNameForm({ initialName }: { initialName: string }) {
   const router = useRouter();
@@ -18,12 +18,11 @@ export function ProfileNameForm({ initialName }: { initialName: string }) {
 
   return (
     <form action={form.handleFormAction} className="space-y-4">
-      <Field name="fullName" label="Display name" defaultValue={initialName} placeholder="Your name" required />
-      {form.error ? <Banner variant="error">{form.error}</Banner> : null}
-      {form.info ? <Banner variant="success">{form.info}</Banner> : null}
-      <Button type="submit" disabled={form.pending}>
-        {form.pending ? 'Saving...' : 'Save name'}
-      </Button>
+      <Field name="name" label="Display name" defaultValue={initialName} placeholder="Your name" required />
+      <FormFeedback error={form.error} success={form.info} />
+      <SubmitButton pending={form.pending} pendingLabel="Saving...">
+        Save name
+      </SubmitButton>
     </form>
   );
 }

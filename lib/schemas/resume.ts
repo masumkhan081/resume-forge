@@ -60,9 +60,53 @@ export const resumeDraftSchema = z.object({
 });
 export type ResumeDraftSchema = z.infer<typeof resumeDraftSchema>;
 
-export const resumeTemplateSchema = z.enum(
-  RESUME_TEMPLATE_IDS as [string, ...string[]],
-);
+// Lenient counterpart used by the autosave path: persist whatever the user has
+// typed without blocking on min/length rules. Strict validation still runs
+// client-side via zodResolver(resumeDraftSchema) and surfaces per-field errors.
+const draftBasicsSchema = z.object({
+  fullName: z.string(),
+  professionalTitle: z.string(),
+  email: z.string(),
+  phone: z.string(),
+  location: z.string(),
+  website: z.string(),
+  github: z.string(),
+  linkedin: z.string(),
+  summary: z.string(),
+});
+
+const draftEducationItemSchema = z.object({
+  institution: z.string(),
+  degree: z.string(),
+  year: z.string(),
+});
+
+const draftExperienceItemSchema = z.object({
+  company: z.string(),
+  role: z.string(),
+  start: z.string(),
+  end: z.string(),
+  current: z.boolean(),
+  summary: z.string(),
+});
+
+const draftProjectItemSchema = z.object({
+  title: z.string(),
+  description: z.string(),
+  link: z.string(),
+  technologies: z.array(z.string()),
+});
+
+export const draftResumeSchema = z.object({
+  basics: draftBasicsSchema,
+  skills: skillsSchema,
+  education: z.array(draftEducationItemSchema),
+  experience: z.array(draftExperienceItemSchema),
+  projects: z.array(draftProjectItemSchema),
+  extras: extrasSchema,
+});
+
+export const resumeTemplateSchema = z.enum(RESUME_TEMPLATE_IDS);
 
 export const resumeNameSchema = z
   .string()
@@ -74,9 +118,9 @@ export const createResumeInputSchema = z.object({
   template: resumeTemplateSchema.optional(),
 });
 
-export const updateResumeInputSchema = z.object({
+export const autosaveResumeInputSchema = z.object({
   id: z.string().min(1),
-  data: resumeDraftSchema,
+  data: draftResumeSchema,
   template: resumeTemplateSchema.optional(),
 });
 

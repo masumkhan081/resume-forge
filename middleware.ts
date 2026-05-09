@@ -1,16 +1,10 @@
+import NextAuth from 'next-auth';
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { SESSION_COOKIE } from '@/lib/auth/constants';
+import authConfig from './auth.config';
 
-const PROTECTED_PREFIXES = ['/dashboard', '/builder', '/resume', '/profile'];
+const { auth } = NextAuth(authConfig);
 
-function isProtected(pathname: string) {
-  return PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
-
-export function middleware(request: NextRequest) {
+export default auth((request) => {
   if (
     process.env.NODE_ENV === 'production' &&
     request.headers.get('x-forwarded-proto') === 'http'
@@ -19,22 +13,11 @@ export function middleware(request: NextRequest) {
     url.protocol = 'https:';
     return NextResponse.redirect(url, 308);
   }
-
-  const { pathname } = request.nextUrl;
-  if (!isProtected(pathname)) return NextResponse.next();
-
-  const session = request.cookies.get(SESSION_COOKIE)?.value;
-  if (session) return NextResponse.next();
-
-  const url = request.nextUrl.clone();
-  url.pathname = '/auth/login';
-  url.search = '';
-  url.searchParams.set('next', pathname + request.nextUrl.search);
-  return NextResponse.redirect(url);
-}
+  return NextResponse.next();
+});
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/health|sitemap.xml|robots.txt).*)',
+    '/((?!api/auth|_next/static|_next/image|favicon.ico|api/health|sitemap.xml|robots.txt).*)',
   ],
 };

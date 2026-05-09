@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
-import { FileText, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { listResumesAction } from '@/lib/actions/resume-actions';
 import { Card } from '@/components/ui/card';
-import { Banner } from '@/components/ui/banner';
+import { PageHeader } from '@/components/ui/page-header';
+import { FormFeedback } from '@/components/ui/form-feedback';
 import { LinkButton } from '@/components/ui/link-button';
+import { DashboardEmptyState } from '@/components/dashboard/dashboard-empty-state';
 import { DeleteResumeButton } from '@/components/dashboard/delete-resume-button';
 import { RenameResumeForm } from '@/components/dashboard/rename-resume-form';
 import type { ResumeSummary } from '@/lib/types/resume';
@@ -25,38 +27,41 @@ export default async function DashboardPage({
 }) {
   const params = await searchParams;
   const result = await listResumesAction();
+  const total = result.ok ? result.data.total : 0;
+  const description =
+    total === 0
+      ? 'Build, edit, and preview as many resumes as you need.'
+      : `${total} resume${total === 1 ? '' : 's'} · build, edit, preview, export.`;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      <Card className="flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700 sm:text-sm">
-            Your workspace
-          </p>
-          <h1 className="mt-2 text-2xl font-semibold text-ink sm:text-3xl">
-            Resumes
-          </h1>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            Build, edit, and preview as many resumes as you need.
-          </p>
-        </div>
-        <LinkButton href="/builder/new">
-          <Plus className="h-4 w-4" /> New resume
-        </LinkButton>
+    <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <Card className="p-5 sm:p-6">
+        <PageHeader
+          eyebrow="Your workspace"
+          title="Resumes"
+          description={description}
+          action={
+            total > 0 ? (
+              <LinkButton href="/builder/new" className="w-full sm:w-auto">
+                <Plus className="h-4 w-4" /> New resume
+              </LinkButton>
+            ) : null
+          }
+        />
       </Card>
 
       {params.error ? (
         <div className="mt-4">
-          <Banner variant="error">{params.error}</Banner>
+          <FormFeedback error={params.error} />
         </div>
       ) : null}
 
       {!result.ok ? (
         <div className="mt-6">
-          <Banner variant="error">{result.error.message}</Banner>
+          <FormFeedback error={result.error.message} />
         </div>
       ) : result.data.items.length === 0 ? (
-        <EmptyState />
+        <DashboardEmptyState />
       ) : (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {result.data.items.map((resume) => (
@@ -68,30 +73,10 @@ export default async function DashboardPage({
   );
 }
 
-function EmptyState() {
-  return (
-    <Card className="mt-6 flex flex-col items-center gap-4 p-10 text-center">
-      <div className="rounded-2xl bg-brand-100 p-3 text-brand-800">
-        <FileText className="h-6 w-6" />
-      </div>
-      <div>
-        <h2 className="text-lg font-semibold text-ink">Start your first resume</h2>
-        <p className="mt-1 text-sm leading-6 text-slate-600">
-          A new resume is seeded with the sample so you can see the structure right
-          away. Customise it, save, and download the PDF whenever you&apos;re ready.
-        </p>
-      </div>
-      <LinkButton href="/builder/new">
-        <Plus className="h-4 w-4" /> New resume
-      </LinkButton>
-    </Card>
-  );
-}
-
 function ResumeCard({ resume }: { resume: ResumeSummary }) {
   return (
     <Card className="flex flex-col justify-between gap-4 p-5">
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         <RenameResumeForm id={resume.id} initialName={resume.name} />
         <p className="text-xs uppercase tracking-[0.18em] text-brand-700">
           {resume.template}
@@ -101,8 +86,12 @@ function ResumeCard({ resume }: { resume: ResumeSummary }) {
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <LinkButton href={`/builder/${resume.id}`} size="sm">Edit</LinkButton>
-        <LinkButton href={`/resume/${resume.id}`} size="sm" variant="secondary">Preview</LinkButton>
+        <LinkButton href={`/builder/${resume.id}`} size="sm">
+          Edit
+        </LinkButton>
+        <LinkButton href={`/resume/${resume.id}`} size="sm" variant="secondary">
+          Preview
+        </LinkButton>
         <div className="ml-auto">
           <DeleteResumeButton id={resume.id} />
         </div>

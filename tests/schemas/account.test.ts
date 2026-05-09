@@ -8,11 +8,11 @@ import {
 
 describe('updateNameSchema', () => {
   it('rejects a single-character name', () => {
-    expect(updateNameSchema.safeParse({ fullName: 'A' }).success).toBe(false);
+    expect(updateNameSchema.safeParse({ name: 'A' }).success).toBe(false);
   });
 
   it('accepts a valid name', () => {
-    expect(updateNameSchema.safeParse({ fullName: 'Masum Khan' }).success).toBe(true);
+    expect(updateNameSchema.safeParse({ name: 'Masum Khan' }).success).toBe(true);
   });
 });
 

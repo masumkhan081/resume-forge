@@ -1,13 +1,18 @@
+import type { ReactNode } from 'react';
+
 export function ArrayCard({
   children,
   onRemove,
+  dragHandle,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   onRemove: () => void;
+  dragHandle?: ReactNode;
 }) {
   return (
     <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-4">
-      <div className="mb-3 flex justify-end">
+      <div className="mb-3 flex items-center justify-between">
+        <div>{dragHandle ?? null}</div>
         <button
           type="button"
           onClick={onRemove}
@@ -21,7 +26,13 @@ export function ArrayCard({
   );
 }
 
-export function AddItemButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+export function AddItemButton({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"

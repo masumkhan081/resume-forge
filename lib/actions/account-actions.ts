@@ -1,12 +1,18 @@
 'use server';
 
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { prisma } from '@/lib/db';
-import { SESSION_COOKIE } from '@/lib/auth/constants';
+import mongoose, { Types } from 'mongoose';
+import { signOut } from '@/auth';
+import { connectMongo } from '@/lib/mongodb';
+import { User } from '@/lib/models/user';
+import { Resume } from '@/lib/models/resume';
+import { PasswordResetToken } from '@/lib/models/password-reset-token';
 import { hashPassword, verifyPassword } from '@/lib/auth/password';
 import { failure, success } from '@/lib/types/api';
+import { env } from '@/lib/env';
+import { logger, captureException } from '@/lib/logger';
+import { sendPasswordChangedEmail, sendAccountDeletedEmail } from '@/lib/email';
 import { authed } from './utils';
 import {
   changePasswordServerSchema,
@@ -19,20 +25,30 @@ import {
 
 export async function updateProfileNameAction(input: UpdateNameInput) {
   return authed(updateNameSchema, input, async (data, session) => {
-    await prisma.user.update({
-      where: { id: session.userId },
-      data: { fullName: data.fullName.trim() },
-    });
+    await connectMongo();
+    await User.updateOne(
+      { _id: new Types.ObjectId(session.userId) },
+      { name: data.name.trim() },
+    );
     revalidatePath('/profile');
     revalidatePath('/dashboard');
-    return success({ fullName: data.fullName }, 'Name updated.');
+    return success({ name: data.name }, 'Name updated.');
   });
 }
 
 export async function changePasswordAction(input: ChangePasswordServerInput) {
   return authed(changePasswordServerSchema, input, async (data, session) => {
-    const user = await prisma.user.findUnique({ where: { id: session.userId } });
+    await connectMongo();
+
+    const userId = new Types.ObjectId(session.userId);
+    const user = await User.findById(userId).select('_id email passwordHash').lean();
     if (!user) return failure('NOT_FOUND', 'Account not found.');
+    if (!user.passwordHash) {
+      return failure(
+        'NO_PASSWORD',
+        'This account uses a third-party sign-in. Set a password via recovery first.',
+      );
+    }
 
     const valid = await verifyPassword(data.currentPassword, user.passwordHash);
     if (!valid) {
@@ -40,16 +56,25 @@ export async function changePasswordAction(input: ChangePasswordServerInput) {
     }
 
     const newHash = await hashPassword(data.newPassword);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash: newHash },
-    });
+    await User.updateOne({ _id: user._id }, { passwordHash: newHash });
 
-    await prisma.session.deleteMany({
-      where: { userId: user.id, NOT: { id: session.id } },
-    });
+    try {
+      await sendPasswordChangedEmail({
+        to: user.email,
+        recoveryUrl: `${env.NEXT_PUBLIC_BASE_URL}/auth/recovery`,
+      });
+    } catch (error) {
+      captureException(error, {
+        action: 'changePasswordAction.email',
+        userId: user._id.toString(),
+      });
+    }
 
-    return success({ ok: true }, 'Password updated. Other devices have been signed out.');
+    logger.info('user.password_changed', { userId: user._id.toString() });
+    return success(
+      { ok: true },
+      'Password updated. Other devices stay signed in until their session expires.',
+    );
   });
 }
 
@@ -59,10 +84,30 @@ export async function deleteAccountAction(input: DeleteAccountInput) {
       return failure('CONFIRMATION_MISMATCH', 'Confirmation does not match your email.');
     }
 
-    await prisma.user.delete({ where: { id: session.userId } });
-    const cookieStore = await cookies();
-    cookieStore.delete(SESSION_COOKIE);
+    await connectMongo();
+    const userId = new Types.ObjectId(session.userId);
+    const userEmail = session.email;
 
+    const dbSession = await mongoose.startSession();
+    try {
+      await dbSession.withTransaction(async () => {
+        await Resume.deleteMany({ userId }).session(dbSession);
+        await PasswordResetToken.deleteMany({ userId }).session(dbSession);
+        await User.deleteOne({ _id: userId }).session(dbSession);
+      });
+    } finally {
+      await dbSession.endSession();
+    }
+
+    await signOut({ redirect: false });
+
+    try {
+      await sendAccountDeletedEmail({ to: userEmail });
+    } catch (error) {
+      captureException(error, { action: 'deleteAccountAction.email' });
+    }
+
+    logger.info('user.account_deleted', { email: userEmail });
     return success({ ok: true }, 'Account deleted.');
   });
 }

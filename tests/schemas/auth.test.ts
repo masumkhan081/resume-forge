@@ -27,7 +27,7 @@ describe('loginSchema', () => {
 
 describe('signupSchema', () => {
   const valid = {
-    fullName: 'Test User',
+    name: 'Test User',
     email: 'test@example.com',
     password: 'secret123',
     confirmPassword: 'secret123',
@@ -43,7 +43,7 @@ describe('signupSchema', () => {
   });
 
   it('rejects a too-short name', () => {
-    const result = signupSchema.safeParse({ ...valid, fullName: 'A' });
+    const result = signupSchema.safeParse({ ...valid, name: 'A' });
     expect(result.success).toBe(false);
   });
 });
@@ -51,7 +51,7 @@ describe('signupSchema', () => {
 describe('signupServerSchema', () => {
   it('does not require confirmPassword', () => {
     const result = signupServerSchema.safeParse({
-      fullName: 'Test User',
+      name: 'Test User',
       email: 'a@b.co',
       password: 'secret123',
     });

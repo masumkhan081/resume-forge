@@ -22,13 +22,13 @@ export type ProjectItem = {
   technologies: string[];
 };
 
-export type ResumeTemplateId = 'classic-teal' | 'minimal-mono' | 'modern-sidebar';
-
-export const RESUME_TEMPLATE_IDS: ResumeTemplateId[] = [
+export const RESUME_TEMPLATE_IDS = [
   'classic-teal',
   'minimal-mono',
   'modern-sidebar',
-];
+] as const;
+
+export type ResumeTemplateId = (typeof RESUME_TEMPLATE_IDS)[number];
 
 export type ResumeDraft = {
   basics: {

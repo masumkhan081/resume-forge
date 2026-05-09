@@ -15,7 +15,7 @@ export const confirmPasswordField = z
   .string()
   .min(8, 'Confirm your password.');
 
-export const fullNameField = z.string().min(2, 'Enter your full name.');
+export const nameField = z.string().min(2, 'Enter your name.');
 
 export const loginSchema = z.object({
   email: emailField,
@@ -24,7 +24,7 @@ export const loginSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>;
 
 const signupBaseSchema = z.object({
-  fullName: fullNameField,
+  name: nameField,
   email: emailField,
   password: passwordField,
 });
@@ -32,7 +32,7 @@ export const signupServerSchema = signupBaseSchema;
 export type SignupServerInput = z.infer<typeof signupServerSchema>;
 
 export const signupSchema = signupBaseSchema
-  .extend({ confirmPassword: z.string().min(6, 'Confirm your password.') })
+  .extend({ confirmPassword: confirmPasswordField })
   .refine((data) => data.password === data.confirmPassword, {
     message: 'Passwords do not match.',
     path: ['confirmPassword'],
